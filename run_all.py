@@ -15,7 +15,7 @@ prefetchers = ['ip_stride']
 branch_predictors = ['bimodal']
 
 # Directory containing trace files.
-trace_dir = 'tinytraces/'
+trace_dir = 'traces/'
 
 # Ensure there is a directory to store the outputs
 output_dir = 'simulation_outputs/'
@@ -52,7 +52,7 @@ def run_simulation(trace,  prefetcher, branch_predictor):
     # Config command with output redirection
     config_command = f"./config.sh {config_path} >> {output_file_name}.log 2>&1"
     make_command = "make > {output_file_name}.log 2>&1"
-    sim_command = f"./bin/champsim --warmup_instructions 20 --simulation_instructions 50 {trace} --json {output_file_name}.json >> {output_file_name}.log 2>&1"
+    sim_command = f"./bin/champsim --warmup_instructions 200000000 --simulation_instructions 500000000 {trace} --json {output_file_name}.json >> {output_file_name}.log 2>&1"
     
     # Execute config command
     subprocess.run(config_command, shell=True)
