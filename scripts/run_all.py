@@ -3,11 +3,11 @@
 import os
 import subprocess
 import json
+import time  # Import time module for timing jobs
 
 # Configuration JSON template file path.
 config_template_path = 'champsim_config.json'
 
-# List of prefetchers. Fill in with actual names.
 # prefetchers = ['ip_stride', 'next_line', 'next_line_instr', 'no', 'no_instr', 'spp_dev', 'va_ampm_lite']
 prefetchers = ['ip_stride']
 
@@ -40,6 +40,8 @@ def modify_and_save_config(prefetcher, branch_predictor, output_file_name):
 
 # Function to run the simulator for a single combination of trace, prefetcher, and branch predictor.
 def run_simulation(trace,  prefetcher, branch_predictor):
+    start_time = time.time()  # Start timing
+
     # Extracting trace file name without extension for use in naming output file.
     trace_name = os.path.splitext(os.path.basename(trace))[0]
     
@@ -54,13 +56,22 @@ def run_simulation(trace,  prefetcher, branch_predictor):
     make_command = "make > {output_file_name}.log 2>&1"
     sim_command = f"./bin/champsim --warmup_instructions 200000000 --simulation_instructions 500000000 {trace} --json {output_file_name}.json >> {output_file_name}.log 2>&1"
     
-    # Execute config command
+    # Execute config commands
     subprocess.run(config_command, shell=True)
-    
     subprocess.run(make_command.format(output_file_name=output_file_name), shell=True)
-    
-    # Execute simulation command
     subprocess.run(sim_command, shell=True)
+
+    end_time = time.time()  # End timing
+    job_time = end_time - start_time  # Calculate job time
+
+    # Append job time to the log file
+    with open(f"{output_file_name}.log", "a") as log_file:
+        log_file.write(f"\nJob Time: {job_time} seconds\n")
+
+    return job_time  # Return the job time for summary statistics
+
+# List to store the duration of each job
+job_times = []
 
 # Iterate over each trace file in the traces directory.
 for trace in os.listdir(trace_dir):
@@ -69,5 +80,14 @@ for trace in os.listdir(trace_dir):
     # Iterate over each combination of prefetcher and branch predictor.
     for prefetcher in prefetchers:
         for branch_predictor in branch_predictors:
-            # Call the function to run the simulation.
-            run_simulation(trace_path, prefetcher, branch_predictor)
+            # Call the function to run the simulation and store job time.
+            job_time = run_simulation(trace_path, prefetcher, branch_predictor)
+            job_times.append(job_time)
+
+# Calculate and print summary statistics
+if job_times:
+    print(f"Shortest Job Time: {min(job_times)} seconds")
+    print(f"Longest Job Time: {max(job_times)} seconds")
+    print(f"Average Job Time: {sum(job_times)/len(job_times)} seconds")
+else:
+    print("No jobs were executed.")
