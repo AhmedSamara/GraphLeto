@@ -1,3 +1,6 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/Microsoft/vcpkg.git
+[submodule "gapbs"]
+	path = gapbs
+	url = https://github.com/sbeamer/gapbs.git
