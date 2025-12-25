@@ -47,8 +47,7 @@ class oracle : public champsim::modules::branch_predictor
   void load_oracle_addresses(const std::string& filename);
 
 public:
-  using branch_predictor::branch_predictor;
-  
+  explicit oracle(O3_CPU* cpu);
   ~oracle();
   
   // ChampSim interface

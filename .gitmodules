@@ -4,3 +4,6 @@
 [submodule "gapbs"]
 	path = gapbs
 	url = https://github.com/sbeamer/gapbs.git
+[submodule "GABPS-branch-analysis"]
+	path = GABPS-branch-analysis
+	url = git@github.com:AhmedSamara/GABPS-branch-analysis.git

@@ -1,6 +1,15 @@
 #include "oracle.h"
 #include <iostream>
 #include <fstream>
+#include <cstdlib>
+
+oracle::oracle(O3_CPU* cpu) : champsim::modules::branch_predictor(cpu) {
+    // Load oracle addresses from environment variable if set
+    const char* oracle_file = std::getenv("CHAMPSIM_ORACLE_FILE");
+    if (oracle_file != nullptr) {
+        load_oracle_addresses(oracle_file);
+    }
+}
 
 oracle::~oracle() {
     // Print statistics
