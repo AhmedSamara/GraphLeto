@@ -1,5 +1,5 @@
 {
-  "executable_name": "champsim_cachebp_256x4_oc1024",
+  "executable_name": "champsim_cachebp",
   "block_size": 64,
   "page_size": 4096,
   "heartbeat_frequency": 10000000,

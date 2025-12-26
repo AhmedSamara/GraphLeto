@@ -22,24 +22,46 @@ fi
 # Graphs to test
 GRAPHS=(g13 g19)
 
-# CacheBP configurations to sweep
-# Format: "binary_name:bdt_sets:bdt_ways:description"
+# CacheBP configurations to sweep (powers of 2)
+# Format: "bdt_sets:bdt_ways:description"
 CONFIGS=(
-    "champsim_cachebp_256x4_oc1024:256:4:256x4"
-    "champsim_cachebp_512x4_oc2048:512:4:512x4"
-    "champsim_cachebp_1024x8_oc4096:1024:8:1024x8"
+    "64:4:64x4"
+    "128:4:128x4"
+    "256:4:256x4"
+    "512:4:512x4"
+    "1024:4:1024x4"
+    "2048:4:2048x4"
+    "4096:4:4096x4"
+    "8192:4:8192x4"
+    "86636:4:86636x4"
+    "1048576:4:1048576x4"
 )
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
 mkdir -p "$CORRELATIONS_DIR"
 
+# Build CacheBP binary if needed
+CHAMPSIM_BIN="bin/champsim_cachebp"
+if [ ! -f "$CHAMPSIM_BIN" ]; then
+    echo "Building CacheBP binary..."
+    ./config.sh champsim_config_cachebp.json
+    make -j$(nproc)
+    
+    if [ ! -f "$CHAMPSIM_BIN" ]; then
+        echo "Error: Failed to build CacheBP binary"
+        exit 1
+    fi
+    echo "Build complete!"
+    echo ""
+fi
+
 echo "========================================="
 echo "CacheBP Simulation Suite"
 echo "========================================="
 echo "Benchmarks: ${BENCHMARKS[@]}"
 echo "Graphs: ${GRAPHS[@]}"
-echo "Configurations: ${#CONFIGS[@]}"
+echo "Configurations: ${#CONFIGS[@]} (BDT size sweep)"
 echo "Warmup: ${WARMUP_INSTRUCTIONS} instructions"
 echo "Simulation: ${SIMULATION_INSTRUCTIONS} instructions"
 echo ""
@@ -75,58 +97,45 @@ current_run=0
 
 for BENCHMARK in "${BENCHMARKS[@]}"; do
     for GRAPH in "${GRAPHS[@]}"; do
-        TRACE_FILE="$TRACE_DIR/${BENCHMARK}_${GRAPH}.champsimtrace.xz"
+        TRACE_FILE="${TRACE_DIR}/${BENCHMARK}_${GRAPH}.champsimtrace.xz"
         
-        # Check if trace exists
         if [ ! -f "$TRACE_FILE" ]; then
-            echo "Warning: Trace not found: $TRACE_FILE"
+            echo "Warning: Trace file not found: $TRACE_FILE"
             continue
         fi
         
-        # Extract correlations for this benchmark+graph
-        CORR_FILE="$CORRELATIONS_DIR/${BENCHMARK}_${GRAPH}.csv"
+        # Extract correlations if needed
+        CORR_FILE="${CORRELATIONS_DIR}/${BENCHMARK}_${GRAPH}.csv"
         extract_correlations "$BENCHMARK" "$GRAPH"
         
         for CONFIG in "${CONFIGS[@]}"; do
             current_run=$((current_run + 1))
             
-            # Parse configuration
-            IFS=':' read -r BINARY BDT_SETS BDT_WAYS CONFIG_NAME <<< "$CONFIG"
-            
-            CHAMPSIM_BIN="bin/$BINARY"
-            
-            if [ ! -f "$CHAMPSIM_BIN" ]; then
-                echo "[$current_run/$total_runs] Warning: Binary not found: $CHAMPSIM_BIN"
-                echo "  Run: ./config.sh champsim_config_cachebp_${CONFIG_NAME}_oc*.json && make"
-                continue
-            fi
+            # Parse configuration: "bdt_sets:bdt_ways:config_name"
+            IFS=':' read -r BDT_SETS BDT_WAYS CONFIG_NAME <<< "$CONFIG"
             
             LOG_FILE="$RESULTS_DIR/${BENCHMARK}_${GRAPH}_${CONFIG_NAME}.log"
             
             echo "[$current_run/$total_runs] Running: $BENCHMARK $GRAPH (Config: $CONFIG_NAME)"
             echo "  Binary: $CHAMPSIM_BIN"
-            echo "  BDT: ${BDT_SETS} sets x ${BDT_WAYS} ways"
+            echo "  BDT: ${BDT_SETS} sets x ${BDT_WAYS} ways = $((BDT_SETS * BDT_WAYS)) entries"
             if [ -f "$CORR_FILE" ]; then
                 echo "  Correlations: $CORR_FILE"
             else
-                echo "  Correlations: None (will use dynamic BDT only)"
+                echo "  Correlations: None (will use bimodal fallback only)"
             fi
             echo "  Log: $LOG_FILE"
             
-            # Set environment variables for CacheBP configuration
+            # Set environment variables for CacheBP
             export CACHEBP_BDT_SETS=$BDT_SETS
             export CACHEBP_BDT_WAYS=$BDT_WAYS
-            if [ -f "$CORR_FILE" ]; then
-                export CACHEBP_CORRELATIONS="$CORR_FILE"
-            else
-                unset CACHEBP_CORRELATIONS
-            fi
+            export CACHEBP_CORRELATIONS="$CORR_FILE"
             
             # Run simulation with timeout
             timeout 600 $CHAMPSIM_BIN \
                 --warmup-instructions $WARMUP_INSTRUCTIONS \
                 --simulation-instructions $SIMULATION_INSTRUCTIONS \
-                "$TRACE_FILE" 2>&1 | tee "$LOG_FILE"
+                "$TRACE_FILE" > "$LOG_FILE" 2>&1
             
             exit_code=$?
             if [ $exit_code -eq 124 ]; then

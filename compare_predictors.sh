@@ -22,7 +22,7 @@ fi
 GRAPHS=(g13 g19)
 
 # CacheBP configurations
-CACHEBP_CONFIGS=("256x4" "512x4" "1024x8")
+CACHEBP_CONFIGS=("64x4" "128x4" "256x4" "1024x4" "2048x4" "4096x4" "8192x4" "86636x4" "1048576x4")
 
 echo "========================================="
 echo "Branch Predictor Comparison"
