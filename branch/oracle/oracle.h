@@ -20,6 +20,12 @@ class oracle : public champsim::modules::branch_predictor
   // Oracle branch addresses (PCs that get perfect prediction)
   std::unordered_set<uint64_t> oracle_addresses;
   
+  // Track address ranges to handle ASLR/PIE
+  uint64_t min_seen_address = UINT64_MAX;
+  uint64_t max_seen_address = 0;
+  uint64_t base_address_guess = 0;
+  bool base_address_detected = false;
+  
   // Cache of last outcomes for oracle branches (for "perfect" prediction)
   std::unordered_map<uint64_t, bool> oracle_history;
   

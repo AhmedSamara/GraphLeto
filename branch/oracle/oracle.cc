@@ -26,10 +26,50 @@ oracle::~oracle() {
 }
 
 bool oracle::is_oracle_branch(champsim::address ip) const {
-    return oracle_addresses.find(ip.to<uint64_t>()) != oracle_addresses.end();
+    uint64_t ip_val = ip.to<uint64_t>();
+    
+    // Debug: print first few IPs
+    static int debug_count = 0;
+    if (debug_count++ < 5 && oracle_addresses.size() > 0) {
+        uint64_t offset_20bit = ip_val & 0xFFFFF;  // Lower 20 bits (~1MB)
+        std::cout << "[Oracle BP Debug] IP: 0x" << std::hex << ip_val 
+                  << " offset_20bit: 0x" << offset_20bit << std::dec << std::endl;
+    }
+    
+    // Try direct match first (for non-PIE binaries)
+    if (oracle_addresses.find(ip_val) != oracle_addresses.end()) {
+        return true;
+    }
+    
+    // For PIE binaries with ASLR, match on lower 20 bits
+    // This assumes oracle addresses and runtime addresses share lower bits
+    uint64_t offset = ip_val & 0xFFFFF;  // Lower 20 bits (~1MB range)
+    return oracle_addresses.find(offset) != oracle_addresses.end();
 }
 
 bool oracle::predict_branch(champsim::address ip) {
+    // Debug: dump all unique branch IPs to help create oracle address list
+    static std::unordered_set<uint64_t> seen_branches;
+    static bool dumping_enabled = (std::getenv("CHAMPSIM_DUMP_BRANCHES") != nullptr);
+    static std::string dump_file = dumping_enabled ? std::getenv("CHAMPSIM_DUMP_BRANCHES") : "";
+    
+    if (dumping_enabled) {
+        uint64_t ip_val = ip.to<uint64_t>();
+        if (seen_branches.find(ip_val) == seen_branches.end()) {
+            seen_branches.insert(ip_val);
+            // Append to file
+            std::ofstream out(dump_file, std::ios::app);
+            out << "0x" << std::hex << ip_val << std::dec << "\n";
+            out.close();
+        }
+    }
+    
+    static bool printed_sample = false;
+    if (!printed_sample && oracle_addresses.size() > 0) {
+        std::cout << "[Oracle BP] Sample branch IP seen: 0x" << std::hex << ip.to<uint64_t>() << std::dec << std::endl;
+        printed_sample = true;
+    }
+    
     if (is_oracle_branch(ip)) {
         oracle_predictions++;
         
