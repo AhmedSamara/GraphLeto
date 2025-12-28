@@ -24,6 +24,8 @@ GRAPHS=(g13 g19)
 
 # CacheBP configurations to sweep (powers of 2)
 # Format: "bdt_sets:bdt_ways:description"
+# NOTE: Fixed! Static correlations are now stored IN the BDT structure,
+#       so BDT size affects hit rate. Smaller BDTs have more conflicts.
 CONFIGS=(
     "64:4:64x4"
     "128:4:128x4"
@@ -33,8 +35,6 @@ CONFIGS=(
     "2048:4:2048x4"
     "4096:4:4096x4"
     "8192:4:8192x4"
-    "86636:4:86636x4"
-    "1048576:4:1048576x4"
 )
 
 # Create results directory
@@ -75,8 +75,8 @@ extract_correlations() {
     
     if [ ! -f "$corr_file" ]; then
         echo "  [Extracting correlations for ${benchmark}_${graph}...]"
-        # Use a limited number of instructions for correlation extraction (faster)
-        python3 extract_branch_data_correlations.py "$trace_file" 5000000 10 > "$corr_file" 2>&1 || {
+        # Analyze 20M instructions with lower frequency threshold for better coverage
+        python3 extract_branch_data_correlations.py "$trace_file" 20000000 5 > "$corr_file" 2>/dev/null || {
             echo "    Warning: Correlation extraction failed, will run without correlations"
             rm -f "$corr_file"
         }
@@ -144,12 +144,12 @@ for BENCHMARK in "${BENCHMARKS[@]}"; do
                 echo "  WARNING: Simulation failed with exit code $exit_code"
             else
                 # Extract key metrics
-                IPC=$(grep "cumulative IPC:" "$LOG_FILE" | tail -1 | awk '{print $7}')
-                MPKI=$(grep "MPKI:" "$LOG_FILE" | head -1 | awk '{print $5}')
-                ACCURACY=$(grep "Branch Prediction Accuracy:" "$LOG_FILE" | awk '{print $5}')
+                IPC=$(grep "CPU 0 cumulative IPC:" "$LOG_FILE" | awk '{print $5}')
+                ACCURACY=$(grep "Branch Prediction Accuracy:" "$LOG_FILE" | awk '{print $6}')
+                MPKI=$(grep "Branch Prediction Accuracy:" "$LOG_FILE" | awk '{print $8}')
                 BDT_HIT=$(grep "BDT hit rate:" "$LOG_FILE" | tail -1 | awk '{print $4}')
                 
-                echo "  Results: IPC=$IPC MPKI=$MPKI Accuracy=$ACCURACY BDT_Hit=$BDT_HIT"
+                echo "  Results: IPC=$IPC Accuracy=$ACCURACY MPKI=$MPKI BDT_Hit=$BDT_HIT"
             fi
             
             echo ""

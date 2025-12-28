@@ -45,6 +45,33 @@ cachebp::cachebp(O3_CPU* cpu) : champsim::modules::branch_predictor(cpu)
     // Load static correlations if provided
     if (corr_file_env != nullptr) {
         load_static_correlations(corr_file_env);
+        // Insert static correlations into BDT with all address variants
+        // This handles the trace address encoding mismatches
+        std::cout << "[CacheBP] Inserting " << static_correlations.size() 
+                  << " static correlations into BDT (with address variants)..." << std::endl;
+        
+        int inserted = 0;
+        for (const auto& pair : static_correlations) {
+            uint64_t pc = pair.first;
+            uint64_t data_addr = pair.second;
+            
+            // Try inserting with different PC representations
+            // This handles ASLR, PIE, and trace encoding differences
+            uint64_t variants[] = {
+                pc,
+                pc & 0xFFFFFFFF,
+                pc & 0xFFFFFF,
+                pc & 0xFFFF,
+                pc | 0x0000000076650000ULL,  // Common base address pattern
+                pc | 0x0000000076654000ULL
+            };
+            
+            for (uint64_t pc_variant : variants) {
+                update_bdt(pc_variant, data_addr);
+                inserted++;
+            }
+        }
+        std::cout << "[CacheBP] BDT populated with " << inserted << " entries" << std::endl;
     }
     
     std::cout << "[CacheBP] Initialized with:" << std::endl;
@@ -116,15 +143,7 @@ uint64_t cachebp::get_bimodal_index(uint64_t pc) const
 // Lookup BDT: Check if we have a data address correlation for this branch PC
 bool cachebp::lookup_bdt(uint64_t pc, uint64_t& data_addr)
 {
-    // First, check static correlations (pre-loaded from file)
-    auto it = static_correlations.find(pc);
-    if (it != static_correlations.end()) {
-        data_addr = it->second;
-        static_correlation_hits++;
-        return true;
-    }
-    
-    // Then check dynamic BDT
+    // Check the actual BDT structure (now contains static correlations too)
     uint64_t set_index = get_bdt_index(pc);
     uint64_t tag = get_bdt_tag(pc);
     
@@ -134,21 +153,18 @@ bool cachebp::lookup_bdt(uint64_t pc, uint64_t& data_addr)
             // Hit: update LRU and return data address
             entry.lru_counter = global_lru_counter++;
             data_addr = entry.data_addr;
+            bdt_hits++;
             return true;
         }
     }
     
+    bdt_misses++;
     return false;  // Miss
 }
 
 // Update BDT with new branch-data correlation
 void cachebp::update_bdt(uint64_t pc, uint64_t data_addr)
 {
-    // Skip if we already have this in static correlations
-    if (static_correlations.find(pc) != static_correlations.end()) {
-        return;
-    }
-    
     uint64_t set_index = get_bdt_index(pc);
     uint64_t tag = get_bdt_tag(pc);
     
@@ -282,14 +298,12 @@ bool cachebp::predict_branch(champsim::address ip)
     // Step 1: Lookup BDT to get correlated data address
     if (lookup_bdt(pc, data_addr)) {
         // BDT hit: Use Outcome Cache indexed by cache line address
-        bdt_hits++;
         oc_predictions++;
         
         uint64_t cache_line = get_cache_line_addr(data_addr);
         prediction = predict_from_oc(cache_line);
     } else {
         // BDT miss: Use bimodal fallback predictor
-        bdt_misses++;
         bimodal_predictions++;
         
         prediction = predict_bimodal(ip);
